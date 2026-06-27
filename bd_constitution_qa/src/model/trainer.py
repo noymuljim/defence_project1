@@ -299,7 +299,26 @@ class BanglaQATrainer:
             references = [
                 {"id": ex["id"], "answers": ex["answers"]} for ex in dev_examples
             ]
-            return metric.compute(predictions=formatted_preds, references=references)
+
+            result = metric.compute(predictions=formatted_preds, references=references)
+
+            # Debug visibility: confirm what the metric actually returned.
+            logger.info(f"DEBUG compute_metrics raw result: {result}")
+
+            if not result:
+                logger.warning(
+                    "compute_metrics: evaluate.load('squad') returned empty/None. "
+                    "Falling back to manual EM/F1 computation."
+                )
+                result = _manual_squad_metrics(formatted_preds, references)
+                logger.info(f"DEBUG manual fallback result: {result}")
+
+            # Normalize key names so metric_for_best_model='f1' always resolves.
+            normalized = {}
+            for k, v in result.items():
+                key = k.lower().replace("-", "_")
+                normalized[key] = v
+            return normalized
 
         return compute_metrics
 
@@ -319,7 +338,7 @@ class BanglaQATrainer:
             weight_decay=0.01,
             fp16=torch.cuda.is_available(),
             gradient_accumulation_steps=2 if self.batch_size < 16 else 1,
-            evaluation_strategy="epoch",
+            eval_strategy="epoch",
             save_strategy="epoch",
             load_best_model_at_end=True,
             metric_for_best_model="f1",
@@ -335,7 +354,7 @@ class BanglaQATrainer:
             args=training_args,
             train_dataset=tokenized_train,
             eval_dataset=tokenized_dev,
-            tokenizer=self.tokenizer,
+            processing_class=self.tokenizer,
             data_collator=default_data_collator,
             compute_metrics=self.compute_metrics_fn(dev_examples, list(tokenized_dev)),
             callbacks=[EarlyStoppingCallback(early_stopping_patience=2)],
@@ -382,7 +401,7 @@ class BanglaQATrainer:
         trainer = Trainer(
             model=self.model,
             args=training_args,
-            tokenizer=self.tokenizer,
+            processing_class=self.tokenizer,
             data_collator=default_data_collator,
         )
 
@@ -399,8 +418,88 @@ class BanglaQATrainer:
         references = [{"id": ex["id"], "answers": ex["answers"]} for ex in test_examples]
         results = metric.compute(predictions=formatted_preds, references=references)
 
+        if not results:
+            logger.warning("evaluate_on_test: squad metric returned empty, using manual fallback.")
+            results = _manual_squad_metrics(formatted_preds, references)
+
         logger.info(f"Test set results: EM={results['exact_match']:.2f}, F1={results['f1']:.2f}")
         return results
+
+
+# ── Manual EM/F1 fallback ──────────────────────────────────────────────────────
+# Used only if evaluate.load("squad") fails to return scores (e.g. due to a
+# version mismatch in the `evaluate`/`datasets` packages). Implements the
+# standard SQuAD v1.1 normalization + EM/F1 scoring so training never
+# crashes on metric_for_best_model lookups.
+
+import re
+import string
+
+
+def _normalize_answer(s: str) -> str:
+    def remove_articles(text):
+        return re.sub(r"\b(a|an|the)\b", " ", text)
+
+    def white_space_fix(text):
+        return " ".join(text.split())
+
+    def remove_punc(text):
+        exclude = set(string.punctuation)
+        return "".join(ch for ch in text if ch not in exclude)
+
+    def lower(text):
+        return text.lower()
+
+    return white_space_fix(remove_articles(remove_punc(lower(s))))
+
+
+def _f1_score(prediction: str, ground_truth: str) -> float:
+    pred_tokens = _normalize_answer(prediction).split()
+    gt_tokens = _normalize_answer(ground_truth).split()
+
+    if len(pred_tokens) == 0 or len(gt_tokens) == 0:
+        return float(pred_tokens == gt_tokens)
+
+    common = collections.Counter(pred_tokens) & collections.Counter(gt_tokens)
+    num_same = sum(common.values())
+    if num_same == 0:
+        return 0.0
+
+    precision = num_same / len(pred_tokens)
+    recall = num_same / len(gt_tokens)
+    return (2 * precision * recall) / (precision + recall)
+
+
+def _exact_match_score(prediction: str, ground_truth: str) -> float:
+    return float(_normalize_answer(prediction) == _normalize_answer(ground_truth))
+
+
+def _manual_squad_metrics(formatted_preds: list[dict], references: list[dict]) -> dict:
+    """Compute SQuAD-style EM/F1 without relying on the `evaluate` library."""
+    preds_by_id = {p["id"]: p["prediction_text"] for p in formatted_preds}
+
+    em_total = 0.0
+    f1_total = 0.0
+    count = 0
+
+    for ref in references:
+        qid = ref["id"]
+        gold_answers = ref["answers"]["text"]
+        if not gold_answers:
+            continue
+        prediction = preds_by_id.get(qid, "")
+
+        em_total += max(_exact_match_score(prediction, gt) for gt in gold_answers)
+        f1_total += max(_f1_score(prediction, gt) for gt in gold_answers)
+        count += 1
+
+    if count == 0:
+        return {"exact_match": 0.0, "f1": 0.0}
+
+    return {
+        "exact_match": 100.0 * em_total / count,
+        "f1": 100.0 * f1_total / count,
+    }
 
 
 if __name__ == "__main__":
