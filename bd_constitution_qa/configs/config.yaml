@@ -1,0 +1,64 @@
+# configs/config.yaml
+# Central configuration for the Bangladesh Constitution QA System
+
+project:
+  name: "Bangladesh Constitution QA System"
+  version: "1.0.0"
+  language: "bn"
+
+paths:
+  raw_constitution_pdf: "data/raw/constitution_bn.pdf"
+  raw_constitution_en_pdf: "data/raw/constitution_en.pdf"
+  corpus_json: "data/processed/corpus.json"
+  train_squad: "data/squad/train.json"
+  dev_squad: "data/squad/dev.json"
+  test_squad: "data/squad/test.json"
+  model_output: "models/banglabert-qa"
+  faiss_index: "data/index/faiss.index"
+  chroma_dir: "data/index/chroma"
+  bm25_cache: "data/index/bm25_cache.pkl"
+  logs: "logs/"
+
+model:
+  base_model: "csebuetnlp/banglabert"
+  fallback_model: "bert-base-multilingual-cased"
+  embedding_model: "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+  max_seq_length: 512
+  doc_stride: 128
+  max_query_length: 64
+  max_answer_length: 150
+  n_best_size: 20
+
+training:
+  num_train_epochs: 4
+  per_device_train_batch_size: 8
+  per_device_eval_batch_size: 16
+  learning_rate: 2.0e-5
+  warmup_ratio: 0.1
+  weight_decay: 0.01
+  fp16: true
+  gradient_accumulation_steps: 2
+  eval_strategy: "epoch"
+  save_strategy: "epoch"
+  load_best_model_at_end: true
+  metric_for_best_model: "f1"
+  logging_steps: 50
+  seed: 42
+
+retrieval:
+  top_k_bm25: 10
+  top_k_dense: 10
+  top_k_final: 5             # passages sent to the model
+  bm25_weight: 0.4
+  dense_weight: 0.6
+  similarity_threshold: 0.3  # discard passages below this
+
+api:
+  host: "0.0.0.0"
+  port: 8000
+  workers: 1
+  max_question_length: 500
+
+wandb:
+  project: "bd-constitution-qa"
+  entity: null               # set to your W&B username
