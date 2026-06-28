@@ -1,50 +1,27 @@
-# Bangladesh Constitution QA System — Requirements
-# Python 3.10 recommended
+# Bangladesh Constitution QA System — Requirements (cleaned, minimal)
+# Tested working combo on Colab T4 (Python 3.12)
+# NOTE: torch intentionally NOT pinned — use whatever Colab/your env already
+# has preinstalled (matches CUDA build). Pinning torch caused version-hell
+# with torchvision/torchao earlier.
 
 # ── Core ML ─────────────────────────────────────────────────────────────────
-torch==2.2.0
-transformers==4.40.0
+transformers==4.46.3
 datasets==2.19.0
-tokenizers==0.19.0
-accelerate==0.29.0
+tokenizers==0.20.3
+accelerate==1.0.1
+huggingface_hub==0.26.2
 evaluate==0.4.1
 sentencepiece==0.2.0
 
-# ── Retrieval ────────────────────────────────────────────────────────────────
-rank-bm25==0.2.2
-faiss-cpu==1.8.0
-sentence-transformers==2.7.0
-chromadb==0.5.0
-
-# ── Bangla NLP ───────────────────────────────────────────────────────────────
-bnlp-toolkit==3.0.0
-normalizer==0.2.1          # csebuetnlp normalizer (pip install git+https://github.com/csebuetnlp/normalizer)
-
-# ── Data processing ──────────────────────────────────────────────────────────
-PyMuPDF==1.24.0            # fitz — PDF extraction
-python-docx==1.1.0
-pandas==2.2.0
-numpy==1.26.0
-tqdm==4.66.0
-
-# ── Backend API ──────────────────────────────────────────────────────────────
-fastapi==0.111.0
-uvicorn[standard]==0.29.0
-pydantic==2.7.0
-python-multipart==0.0.9
+# ── Retrieval (used in UI for question matching) ────────────────────────────
+scikit-learn==1.4.0
 
 # ── Frontend ─────────────────────────────────────────────────────────────────
 streamlit==1.35.0
 
-# ── Experiment tracking ──────────────────────────────────────────────────────
-wandb==0.17.0
-
-# ── Evaluation ───────────────────────────────────────────────────────────────
-nltk==3.8.1
-scikit-learn==1.4.0
+# ── Data processing ──────────────────────────────────────────────────────────
+numpy==1.26.0
+tqdm==4.66.0
 
 # ── Dev utilities ────────────────────────────────────────────────────────────
-python-dotenv==1.0.0
 loguru==0.7.2
-pytest==8.2.0
-black==24.4.0
